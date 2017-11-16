@@ -31,6 +31,19 @@ class Folder extends Entry implements FolderInterface
 
 
     /** @inheritdoc */
+    final public function hasChild(string $name): bool
+    {
+        foreach ($this->entries as $entry) {
+            if ($entry->name === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /** @inheritdoc */
     final public function getChild(string $name) : EntryInterface
     {
         foreach ($this->entries as $entry) {
@@ -41,6 +54,7 @@ class Folder extends Entry implements FolderInterface
 
         return null;
     }
+
 
     /** @inheritdoc */
     final public function getSize(): int
@@ -62,13 +76,9 @@ class Folder extends Entry implements FolderInterface
         }
     }
 
+
     public function rename(string $newName)
     {
         // TODO: Implement rename() method.
-    }
-
-    public function delete(): bool
-    {
-        // TODO: Implement delete() method.
     }
 }
