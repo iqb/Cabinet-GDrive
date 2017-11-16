@@ -26,11 +26,13 @@ class File extends Entry implements FileInterface
         $this->md5 = $md5;
     }
 
+
     /** @inheritdoc */
     final public function getSize(): int
     {
         return $this->size;
     }
+
 
     /** @inheritdoc */
     final public function hasHash(): bool
@@ -38,19 +40,16 @@ class File extends Entry implements FileInterface
         return true;
     }
 
+
     /** @inheritdoc */
     final public function getHash(): string
     {
         return $this->md5;
     }
 
+
     public function rename(string $newName)
     {
         // TODO: Implement rename() method.
-    }
-
-    public function delete(): bool
-    {
-        // TODO: Implement delete() method.
     }
 }

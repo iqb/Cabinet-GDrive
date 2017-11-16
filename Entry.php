@@ -52,7 +52,11 @@ abstract class Entry implements EntryInterface
     public function getPath(): string
     {
         if ($this->path === null) {
-            $this->path = $this->getParent()->getPath();
+            if ($this->parent === null) {
+                $this->path = "";
+            } else {
+                $this->path = $this->getParent()->getPath();
+            }
         }
 
         return $this->path . \DIRECTORY_SEPARATOR . $this->name;
@@ -95,5 +99,21 @@ abstract class Entry implements EntryInterface
     final public function getParents(): array
     {
         return [ $this->parent ];
+    }
+
+
+    /** @inheritdoc */
+    final public function delete(): bool
+    {
+        $deletor = (function(string $id) { return $this->deleteFile($id); })->bindTo($this->driver, $this->driver);
+        $deletor($this->id);
+
+        if ($this->parent) {
+            unset($this->parent->entries[$this->id]);
+        }
+
+        $this->id = null;
+        $this->parent = null;
+        return true;
     }
 }
