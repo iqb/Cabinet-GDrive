@@ -186,6 +186,10 @@ class Driver implements DriverInterface
         }
 
         if (!isset($oldFileList) || $oldFileList['status'] !== $fileList['status']) {
+            if ($oldFileList) {
+                \rename($cacheFile, $cacheFile . '-' . $oldFileList['status']);
+            }
+
             \file_put_contents($cacheFile, \json_encode($fileList, \JSON_PRETTY_PRINT), \LOCK_EX);
         }
 
@@ -323,21 +327,21 @@ class Driver implements DriverInterface
      * Upload a file and store it in the folder identified by $parentId
      *
      * @param Folder $parent
-     * @param string $sourceFile
+     * @param FileInterface $sourceFile
      * @param string|null $overrideFileName
      * @param int $chunkSize
      * @param callable|null $progressCallback
      * @return File
      */
-    final public function uploadFile(Folder $parent, string $sourceFile, string $overrideFileName = null, int $chunkSize = self::DEFAULT_CHUNK_SIZE, callable $progressCallback = null) : File
+    final public function uploadFile(Folder $parent, FileInterface $sourceFile, string $overrideFileName = null, int $chunkSize = self::DEFAULT_CHUNK_SIZE, callable $progressCallback = null) : File
     {
-        if (!\file_exists($sourceFile)) {
+        if (!\file_exists($sourceFile->getPath())) {
             throw new \InvalidArgumentException('File "' . $sourceFile . '" does not exist!');
         }
 
-        $fileSize = \filesize($sourceFile);
+        $fileSize = $sourceFile->getSize();
         $file = new \Google_Service_Drive_DriveFile([
-            'name' => ($overrideFileName !== null ? $overrideFileName : \basename($sourceFile)),
+            'name' => ($overrideFileName !== null ? $overrideFileName : $sourceFile->getName()),
             'parents' => [ $parent->id ],
         ]);
 
@@ -358,7 +362,7 @@ class Driver implements DriverInterface
         $media->setFileSize($fileSize);
 
         $readPos = 0;
-        $fileHandle = \fopen($sourceFile, 'rb');
+        $fileHandle = \fopen($sourceFile->getPath(), 'rb');
         do {
             $chunk = \stream_get_contents($fileHandle, $chunkSize);
             $readPos += \mb_strlen($chunk, '8bit');
@@ -369,11 +373,11 @@ class Driver implements DriverInterface
         \fclose($fileHandle);
 
         if (!$status) {
-            throw new \RuntimeException('Failed to upload file "' . $sourceFile . "'");
+            throw new \RuntimeException('Failed to upload file "' . $sourceFile->getName() . "'");
         }
 
         /* @var $status \Google_Service_Drive_DriveFile */
-        return new File($parent, $status->id, $status->name, $status->size, $status->md5Checksum);
+        return $this->fileFactory($status->name, $parent, $status->id, $status->size, $status->md5Checksum);
     }
 
 
@@ -421,7 +425,20 @@ class Driver implements DriverInterface
         }
 
         /* @var $status \Google_Service_Drive_DriveFile */
-        return new Folder($parent, $status->id, $status->name);
+        return $this->folderFactory($status->name, $parent, $status->id);
+    }
+
+
+    /**
+     * Delete a file by ID.
+     *
+     * @param string $id
+     * @see Entry::delete()
+     */
+    final protected function deleteFile(string $id)
+    {
+        $this->client->setDefer(false);
+        $this->service->files->delete($id);
     }
 
 
