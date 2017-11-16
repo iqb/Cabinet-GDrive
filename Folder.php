@@ -15,13 +15,23 @@ class Folder extends Entry implements FolderInterface
     public $entries = [];
 
 
-    /**
-     * Get an entry by name
-     *
-     * @param string $name
-     * @return Entry|null
-     */
-    public function get(string $name)
+
+    /** @inheritdoc */
+    final public function getChildren(): array
+    {
+        return $this->entries;
+    }
+
+
+    /** @inheritdoc */
+    final public function isParent(EntryInterface $child): bool
+    {
+        return \in_array($child, $this->entries, true);
+    }
+
+
+    /** @inheritdoc */
+    final public function getChild(string $name) : EntryInterface
     {
         foreach ($this->entries as $entry) {
             if ($entry->name === $name) {
@@ -32,21 +42,8 @@ class Folder extends Entry implements FolderInterface
         return null;
     }
 
-    public function dump(int $level = 0)
-    {
-        parent::dump($level);
-
-        foreach ($this->entries as $entry) {
-            $entry->dump($level+1);
-        }
-    }
-
-    public function getChildren(): array
-    {
-        return $this->entries;
-    }
-
-    public function getSize(): int
+    /** @inheritdoc */
+    final public function getSize(): int
     {
         $size = 0;
         foreach ($this->getChildren() as $child) {
@@ -55,9 +52,14 @@ class Folder extends Entry implements FolderInterface
         return $size;
     }
 
-    public function getChild(string $name): EntryInterface
+
+    public function dump(int $level = 0)
     {
-        // TODO: Implement getChild() method.
+        parent::dump($level);
+
+        foreach ($this->entries as $entry) {
+            $entry->dump($level+1);
+        }
     }
 
     public function rename(string $newName)
@@ -68,10 +70,5 @@ class Folder extends Entry implements FolderInterface
     public function delete(): bool
     {
         // TODO: Implement delete() method.
-    }
-
-    public function isParent(EntryInterface $child): bool
-    {
-        // TODO: Implement isParent() method.
     }
 }
