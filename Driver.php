@@ -124,6 +124,13 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
+    final public function setFileFactory(callable $fileFactory)
+    {
+        $this->fileFactory = $fileFactory;
+    }
+
+
+    /** @inheritdoc */
     final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null) : FolderInterface
     {
         if ($this->folderFactory) {
@@ -138,16 +145,23 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function setFileFactory(callable $fileFactory)
+    final public function setFolderFactory(callable $folderFactory)
     {
-        $this->fileFactory = $fileFactory;
+        $this->folderFactory = $folderFactory;
     }
 
 
     /** @inheritdoc */
-    final public function setFolderFactory(callable $folderFactory)
+    final public function hashFile(FileInterface $file): string
     {
-        $this->folderFactory = $folderFactory;
+        throw new \Exception("GDrive driver does not support hash calculation.");
+    }
+
+
+    /** @inheritdoc */
+    final public function setHashFunction(callable $hashFunction)
+    {
+        throw new \Exception("GDrive driver does not support hash calculation.");
     }
 
 
