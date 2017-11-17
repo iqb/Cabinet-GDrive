@@ -291,7 +291,7 @@ class Driver implements DriverInterface
             $results = $this->service->changes->listChanges($nextPageToken, [
                 'spaces' => 'drive',
                 'pageSize' => 1000,
-                'fields' => 'newStartPageToken, nextPageToken, changes/type, changes/removed, changes/file(' . self::FILE_FETCH_FIELDS . ')',
+                'fields' => 'newStartPageToken, nextPageToken, changes/type, changes/removed, changes/fileId, changes/time, changes/file(' . self::FILE_FETCH_FIELDS . ')',
             ]);
 
             /* @var $change \Google_Service_Drive_Change */
