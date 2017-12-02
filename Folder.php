@@ -67,6 +67,17 @@ class Folder extends Entry implements FolderInterface
     }
 
 
+    /** @inheritdoc */
+    final public function delete(): bool
+    {
+        foreach ($this->getChildren() as $child) {
+            $child->delete();
+        }
+
+        return parent::delete();
+    }
+
+
     public function dump(int $level = 0)
     {
         parent::dump($level);
