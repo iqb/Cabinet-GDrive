@@ -549,15 +549,29 @@ class Driver implements DriverInterface
 
     public function __sleep()
     {
-        return [
+        $fields = [
             'configDir',
             'root',
             'entryList',
             'fileFactory',
             'folderFactory',
-            'fileLoadedHandlers',
-            'folderLoadedHandlers',
-            'folderScannedHandlers',
         ];
+
+        // Handlers with Closures can not be serialized!
+        foreach (['fileLoadedHandlers','folderLoadedHandlers','folderScannedHandlers',] as $handlerType) {
+            $skipHandlers = false;
+            foreach ($this->$handlerType as $handler) {
+                if ($handler instanceof \Closure) {
+                    \trigger_error("'Found closure in $handlerType while serializing, ignoring handlers.", \E_USER_NOTICE);
+                    $skipHandlers = true;
+                    break;
+                }
+            }
+            if (!$skipHandlers) {
+                $fields[] = $handlerType;
+            }
+        }
+
+        return $fields;
     }
 }
