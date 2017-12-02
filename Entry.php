@@ -102,10 +102,18 @@ abstract class Entry implements EntryInterface
     }
 
 
+    final protected function setParent(Folder $parent)
+    {
+        unset($this->parent->entries[$this->id]);
+        $this->parent = $parent;
+        $this->parent->entries[$this->id] = $this;
+    }
+
+
     /** @inheritdoc */
     final public function delete(): bool
     {
-        $deletor = (function(string $id) { return $this->deleteFile($id); })->bindTo($this->driver, $this->driver);
+        $deletor = (function(string $id) { return $this->deleteFile($id); })->bindTo($this->getDriver(), $this->getDriver());
         $deletor($this->id);
 
         if ($this->parent) {
@@ -120,5 +128,39 @@ abstract class Entry implements EntryInterface
     final public function getDriver() : Driver
     {
         return $this->driver;
+    }
+
+
+    /** @inheritdoc */
+    final public function rename(string $newName)
+    {
+        $setter = (function(string $id, string $newName) { $this->moveOrRenameFile($id, $newName, [], []); })->bindTo($this->getDriver(), $this->getDriver());
+        $setter($this->id, $newName);
+        $this->name = $newName;
+    }
+
+
+    /** @inheritdoc */
+    final public function move(FolderInterface $newParent, string $newName = null)
+    {
+        $oldParentIds = [];
+        $newParentIds = [];
+
+        if ($newParent) {
+            if (!$newParent instanceof Folder || $this->getDriver() !== $newParent->getDriver()) {
+                throw new \InvalidArgumentException("Can not move file to a different root!");
+            }
+            $oldParentIds[] = $this->getParent()->id;
+            $newParentIds[] = $newParent->id;
+        }
+
+        if (!$newName) {
+            $newName = $this->getName();
+        }
+
+        $setter = (function(string $id, string $newName, array $oldParentIds, array $newParentIds) { $this->moveOrRenameFile($id, $newName, $oldParentIds, $newParentIds); })->bindTo($this->getDriver(), $this->getDriver());
+        $setter($this->id, $newName, $oldParentIds, $newParentIds);
+        $this->name = $newName;
+        $this->setParent($newParent);
     }
 }

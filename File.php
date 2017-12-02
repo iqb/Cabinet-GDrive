@@ -46,10 +46,4 @@ class File extends Entry implements FileInterface
     {
         return $this->md5;
     }
-
-
-    public function rename(string $newName)
-    {
-        // TODO: Implement rename() method.
-    }
 }

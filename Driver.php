@@ -260,6 +260,8 @@ class Driver implements DriverInterface
     private function createOrUpdateEntries(string $updateToken = null)
     {
         $entryGenerator = ($updateToken ? $this->fetchUpdateList($updateToken) : $this->fetchFileList());
+        $setName = function(string $newName) { return $this->setName($newName); };
+        $setParent = function(FolderInterface $newParent) { return $this->setParent($newParent); };
 
         foreach ($entryGenerator as $file) {
             // Handle changes to existing files
@@ -272,14 +274,19 @@ class Driver implements DriverInterface
                         unset($this->entryList[$file['id']]);
                         $entry->delete();
                     }
+                    continue;
                 }
 
-                // FIXME: handle move/rename
-                elseif ($entry->hasParents() && $entry->getParent()->id !== $file['parentId']) {
+                // Move
+                if ($entry->hasParents() && $entry->getParent()->id !== $file['parentId']) {
+                    $setParentBound = $setParent->bindTo($entry, $entry);
+                    $setParentBound($this->entryList[$file['parentId']]);
                 }
 
-                // Ignore notifications for folders of deleted files
-                else {
+                // Rename
+                if ($entry->getName() !== $file['name']) {
+                    $setNameBound = $setName->bindTo($entry, $entry);
+                    $setNameBound($file['name']);
                 }
             }
 
@@ -524,6 +531,32 @@ class Driver implements DriverInterface
             $this->getDriveService()->files->delete($id);
             unset($this->entryList[$id]);
         }
+    }
+
+
+    /**
+     * Modify the name and/or the parents of a file
+     *
+     * @param string $id Unique identifier of the file
+     * @param string $name New name of the file
+     * @param array $oldParents List of all parent IDs
+     * @param array $newParents List of all wanted parent IDs
+     * @return bool
+     */
+    final protected function moveOrRenameFile(string $id, string $name, array $oldParents, array $newParents) : bool
+    {
+        $file = new \Google_Service_Drive_DriveFile([
+            'name' => $name,
+            'originalFilename' => $name,
+        ]);
+
+        $params = [];
+        if ($oldParents !== $newParents) {
+            $params['addParents'] = \implode(',', \array_diff($newParents, $oldParents));
+            $params['removeParents'] = \implode(',', \array_diff($oldParents, $newParents));
+        }
+
+        return ($this->getDriveService()->files->update($id, $file, $params) !== false);
     }
 
 

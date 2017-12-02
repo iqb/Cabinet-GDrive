@@ -75,10 +75,4 @@ class Folder extends Entry implements FolderInterface
             $entry->dump($level+1);
         }
     }
-
-
-    public function rename(string $newName)
-    {
-        // TODO: Implement rename() method.
-    }
 }
