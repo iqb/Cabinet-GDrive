@@ -111,10 +111,13 @@ abstract class Entry implements EntryInterface
 
 
     /** @inheritdoc */
-    final public function delete(): bool
+    public function delete(): bool
     {
-        $deletor = (function(string $id) { return $this->deleteFile($id); })->bindTo($this->getDriver(), $this->getDriver());
-        $deletor($this->id);
+        // Do not try to delete a deleted item on the remote
+        if ($this->id) {
+            $deletor = (function(string $id) { return $this->deleteFile($id); })->bindTo($this->getDriver(), $this->getDriver());
+            $deletor($this->id);
+        }
 
         if ($this->parent) {
             unset($this->parent->entries[$this->id]);

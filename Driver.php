@@ -263,6 +263,9 @@ class Driver implements DriverInterface
         $setName = function(string $newName) { return $this->setName($newName); };
         $setParent = function(FolderInterface $newParent) { return $this->setParent($newParent); };
 
+        // Store deletes here and invoke later
+        $deletes = [];
+
         foreach ($entryGenerator as $file) {
             // Handle changes to existing files
             if (isset($this->entryList[$file['id']])) {
@@ -272,7 +275,7 @@ class Driver implements DriverInterface
                 if (\array_key_exists('deleted', $file)) {
                     if ($this->entryList[$file['id']]) {
                         unset($this->entryList[$file['id']]);
-                        $entry->delete();
+                        $deletes[] = $entry;
                     }
                     continue;
                 }
@@ -310,6 +313,10 @@ class Driver implements DriverInterface
                     $this->entryList[$file['id']] = $this->fileFactory($file['name'], $parent, $file['id'], $file['size'], $file['md5']);
                 }
             }
+        }
+
+        foreach($deletes as $delete) {
+            $delete->delete();
         }
 
         $token = $entryGenerator->getReturn();
