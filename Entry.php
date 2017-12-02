@@ -116,4 +116,9 @@ abstract class Entry implements EntryInterface
         $this->parent = null;
         return true;
     }
+
+    final public function getDriver() : Driver
+    {
+        return $this->driver;
+    }
 }
