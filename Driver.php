@@ -27,7 +27,7 @@ class Driver implements DriverInterface
     const DEFAULT_MIME_TYPE  = 'application/octet-stream';
     const FOLDER_MIME_TYPE   = 'application/vnd.google-apps.folder';
 
-    const FILE_FETCH_FIELDS  = 'id, name, md5Checksum, parents, size, mimeType, modifiedTime, originalFilename, trashed';
+    const FILE_FETCH_FIELDS  = 'id, name, md5Checksum, parents, size, mimeType, modifiedTime, originalFilename, trashed, properties';
 
     /** @var string */
     private $configDir;
@@ -187,12 +187,12 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null) : FileInterface
+    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null, array $properties = []) : FileInterface
     {
         if ($this->fileFactory) {
-            $file = ($this->fileFactory)($this, $parent, $id, $fileName, $size, $md5);
+            $file = ($this->fileFactory)($this, $parent, $id, $fileName, $size, $md5, $properties);
         } else {
-            $file = new File($this, $parent, $id, $fileName, $size, $md5);
+            $file = new File($this, $parent, $id, $fileName, $size, $md5, $properties);
         }
 
         $this->notifyFileLoaded($file);
@@ -208,12 +208,12 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null) : FolderInterface
+    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null, array $properties = []) : FolderInterface
     {
         if ($this->folderFactory) {
-            $folder = ($this->folderFactory)($this, $parent, $id, $folderName);
+            $folder = ($this->folderFactory)($this, $parent, $id, $folderName, $properties);
         } else {
-            $folder = new Folder($this, $parent, $id, $folderName);
+            $folder = new Folder($this, $parent, $id, $folderName, $properties);
         }
 
         $this->notifyFolderLoaded($folder);
@@ -298,6 +298,8 @@ class Driver implements DriverInterface
                     $setNameBound = $setName->bindTo($entry, $entry);
                     $setNameBound($file['name']);
                 }
+
+                $entry->properties = $file['properties'];
             }
 
             // Ignore deletes if deleted file does not exist any more
@@ -306,18 +308,18 @@ class Driver implements DriverInterface
 
             // Root
             elseif (!$file['parentId']) {
-                $this->entryList[$file['id']] = $this->root = $this->folderFactory($file['name'], null, $file['id']);
+                $this->entryList[$file['id']] = $this->root = $this->folderFactory($file['name'], null, $file['id'], $file['properties']);
             }
 
             else {
                 $parent = $this->entryList[$file['parentId']];
 
                 if ($file['mimeType'] === self::FOLDER_MIME_TYPE) {
-                    $this->entryList[$file['id']] = $this->folderFactory($file['name'], $parent, $file['id']);
+                    $this->entryList[$file['id']] = $this->folderFactory($file['name'], $parent, $file['id'], $file['properties']);
                 }
 
                 else {
-                    $this->entryList[$file['id']] = $this->fileFactory($file['name'], $parent, $file['id'], $file['size'], $file['md5']);
+                    $this->entryList[$file['id']] = $this->fileFactory($file['name'], $parent, $file['id'], $file['size'], $file['md5'], $file['properties']);
                 }
             }
         }
@@ -562,6 +564,7 @@ class Driver implements DriverInterface
         $file = new \Google_Service_Drive_DriveFile([
             'name' => $name,
             'originalFilename' => $name,
+            'properties' => $this->entryList[$id]->properties,
         ]);
 
         $params = [];
@@ -589,6 +592,7 @@ class Driver implements DriverInterface
             'size' => $file->size,
             'modified' => $file->modifiedTime,
             'mimeType' => $file->mimeType,
+            'properties' => $file->properties,
             'parentId' => (\is_array($file->parents) && \count($file->parents) ? $file->parents[0] : null),
         ];
     }
