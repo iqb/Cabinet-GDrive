@@ -186,6 +186,26 @@ class Driver implements DriverInterface
     }
 
 
+    /**
+     * Refresh the access token, call before a direct call to
+     *
+     * @return bool Whether the access token was refreshed
+     */
+    final public function refreshConnection() : bool
+    {
+        // Refresh the token if it's expired.
+        if ($this->client->isAccessTokenExpired()) {
+            $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
+            $this->config['access_token'] = $this->client->getAccessToken();
+
+            \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
     /** @inheritdoc */
     final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null, array $properties = []) : FileInterface
     {
