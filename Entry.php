@@ -41,16 +41,19 @@ abstract class Entry implements EntryInterface
      */
     public $properties;
 
+    /**
+     * @var Driver
+     */
     protected $driver;
 
 
-    public function __construct(Driver $driver, Folder $parent = null, string $id, string $name, array $properties = [])
+    public function __construct(Driver $driver, Folder $parent = null, string $id, string $name, array $properties = null)
     {
         $this->driver = $driver;
         $this->parent = $parent;
         $this->id = $id;
         $this->name = $name;
-        $this->properties = $properties;
+        $this->properties = ($properties ?: []);
 
         $parent->entries[$id] = $this;
     }

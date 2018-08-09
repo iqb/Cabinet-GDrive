@@ -207,7 +207,7 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null, array $properties = []) : FileInterface
+    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null, array $properties = null) : FileInterface
     {
         if ($this->fileFactory) {
             $file = ($this->fileFactory)($this, $parent, $id, $fileName, $size, $md5, $properties);
@@ -228,7 +228,7 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null, array $properties = []) : FolderInterface
+    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null, array $properties = null) : FolderInterface
     {
         if ($this->folderFactory) {
             $folder = ($this->folderFactory)($this, $parent, $id, $folderName, $properties);
