@@ -85,6 +85,19 @@ class Folder extends Entry implements FolderInterface
     }
 
 
+    /**
+     * Incrementally upload a file to the specified folder
+     *
+     * @param string $fileName
+     * @param int $fileSize
+     * @return FileUpload
+     */
+    public function upload(string $fileName, int $fileSize) : FileUpload
+    {
+        return new FileUpload($this->driver, $this, $fileName, $fileSize);
+    }
+
+
     public function dump(int $level = 0)
     {
         parent::dump($level);
