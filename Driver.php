@@ -198,11 +198,16 @@ class Driver implements DriverInterface
     final public function refreshConnection() : bool
     {
         // Refresh the token if it's expired.
-        if ($this->client->isAccessTokenExpired()) {
+        if ($this->client && $this->client->isAccessTokenExpired()) {
+            $oldDefer = $this->client->shouldDefer();
+            $this->client->setDefer(false);
             $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
+            $this->client->setDefer($oldDefer);
+
             $this->config['access_token'] = $this->client->getAccessToken();
 
             \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
+
             return true;
         } else {
             return false;
@@ -370,6 +375,7 @@ class Driver implements DriverInterface
         $lastChangesStartPageToken = $this->getDriveService()->changes->getStartPageToken()->startPageToken;
 
         // Get root folder
+        $this->refreshConnection();
         yield $this->fileToArray($this->getDriveService()->files->get('root', [
             'fields' => self::FILE_FETCH_FIELDS,
         ]));
@@ -377,6 +383,7 @@ class Driver implements DriverInterface
         $nextPageToken = null;
         $this->getClient()->setDefer(false);
         do {
+            $this->refreshConnection();
             $results = $this->getDriveService()->files->listFiles([
                 'orderBy' => 'createdTime',
                 'pageSize' => 1000,
@@ -414,8 +421,10 @@ class Driver implements DriverInterface
     private function fetchUpdateList() : \Generator
     {
         $nextPageToken = $this->updateToken;
-        $this->getClient()->setDefer(false);
         do {
+            $this->refreshConnection();
+
+            $this->getClient()->setDefer(false);
             $results = $this->getDriveService()->changes->listChanges($nextPageToken, [
                 'spaces' => 'drive',
                 'pageSize' => 1000,
