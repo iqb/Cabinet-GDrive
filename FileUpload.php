@@ -119,6 +119,11 @@ class FileUpload
         }
 
         if ($this->status) {
+            // If everything is OK, remove older version of the file
+            if ($this->folder->hasChild($this->name)) {
+                $this->folder->getChild($this->name)->delete();
+            }
+
             $this->driver->createOrUpdateEntries();
             return $this->folder->getChild($this->name);
         } else {
