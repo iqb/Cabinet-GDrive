@@ -524,6 +524,7 @@ class Driver implements DriverInterface
      */
     final public function downloadFile(File $file)
     {
+        $this->refreshConnection();
         $this->getClient()->setDefer(true);
 
         /* @var $httpClient \GuzzleHttp\Client */
@@ -551,6 +552,7 @@ class Driver implements DriverInterface
             'parents' => [ $parent->id ],
         ]);
 
+        $this->refreshConnection();
         $status = $this->getDriveService()->files->create($file, [
             'fields' => self::FILE_FETCH_FIELDS,
         ]);
@@ -573,6 +575,7 @@ class Driver implements DriverInterface
     final protected function deleteFile(string $id)
     {
         if (isset($this->entryList[$id])) {
+            $this->refreshConnection();
             $this->getClient()->setDefer(false);
             $this->getDriveService()->files->delete($id);
             unset($this->entryList[$id]);
@@ -603,6 +606,7 @@ class Driver implements DriverInterface
             $params['removeParents'] = \implode(',', \array_diff($oldParents, $newParents));
         }
 
+        $this->refreshConnection();
         return ($this->getDriveService()->files->update($id, $file, $params) !== false);
     }
 
