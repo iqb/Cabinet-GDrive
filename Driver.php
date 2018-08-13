@@ -53,6 +53,8 @@ class Driver implements DriverInterface
     /** @var Entry[] */
     private $entryList = [];
 
+    private $updateToken;
+
     /**
      * Factory callable to create a new File object
      * @var callable
@@ -79,8 +81,10 @@ class Driver implements DriverInterface
     {
         if (\file_exists($configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE)) {
             $data = \igbinary_unserialize(\file_get_contents($configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE));
+            /* @var $gDrive Driver */
             $gDrive = $data['root']->getDriver();
-            $gDrive->createOrUpdateEntries($data['token']);
+            $gDrive->updateToken = $data['token'];
+            $gDrive->createOrUpdateEntries();
         }
 
         else {
@@ -281,12 +285,10 @@ class Driver implements DriverInterface
      * Create or update the Entry structure representing the files in the GDrive.
      * If an updateToken is supplied, the structure is updated, otherwise created.
      * Finally the cache file is persisted.
-     *
-     * @param string|null $updateToken
      */
-    private function createOrUpdateEntries(string $updateToken = null)
+    public function createOrUpdateEntries()
     {
-        $entryGenerator = ($updateToken ? $this->fetchUpdateList($updateToken) : $this->fetchFileList());
+        $entryGenerator = ($this->updateToken ? $this->fetchUpdateList() : $this->fetchFileList());
         $setName = function(string $newName) { return $this->setName($newName); };
         $setParent = function(FolderInterface $newParent) { return $this->setParent($newParent); };
 
@@ -348,9 +350,9 @@ class Driver implements DriverInterface
             $delete->delete();
         }
 
-        $token = $entryGenerator->getReturn();
-        if (\file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $token, \igbinary_serialize(['token' => $token, 'root' => $this->root]))) {
-            \copy($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $token, $this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE);
+        $this->updateToken = $entryGenerator->getReturn();
+        if (\file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, \igbinary_serialize(['token' => $this->updateToken, 'root' => $this->root]))) {
+            \copy($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, $this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE);
         }
     }
 
@@ -407,12 +409,11 @@ class Driver implements DriverInterface
      * If too many changes accumulated since the last sync, they may come in an order that can not be used
      *  to update the folder cache. In that case, delete the folder cache file and do a complete sync.
      *
-     * @param string $startPageToken
      * @return \Generator
      */
-    private function fetchUpdateList(string $startPageToken) : \Generator
+    private function fetchUpdateList() : \Generator
     {
-        $nextPageToken = $startPageToken;
+        $nextPageToken = $this->updateToken;
         $this->getClient()->setDefer(false);
         do {
             $results = $this->getDriveService()->changes->listChanges($nextPageToken, [

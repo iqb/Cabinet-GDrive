@@ -119,7 +119,8 @@ class FileUpload
         }
 
         if ($this->status) {
-            return $this->driver->fileFactory($this->status->name, $this->folder, $this->status->id, $this->status->size, $this->status->md5Checksum);
+            $this->driver->createOrUpdateEntries();
+            return $this->folder->getChild($this->name);
         } else {
             throw new \RuntimeException("File upload failed");
         }
