@@ -13,6 +13,7 @@ use Iqb\Cabinet\DriverHandlerTrait;
 use Iqb\Cabinet\DriverInterface;
 use Iqb\Cabinet\FileInterface;
 use Iqb\Cabinet\FolderInterface;
+use Psr\Log\LoggerInterface;
 
 class Driver implements DriverInterface
 {
@@ -28,6 +29,9 @@ class Driver implements DriverInterface
     const FOLDER_MIME_TYPE   = 'application/vnd.google-apps.folder';
 
     const FILE_FETCH_FIELDS  = 'id, name, md5Checksum, parents, size, mimeType, modifiedTime, originalFilename, trashed, properties';
+
+    /** @var LoggerInterface */
+    private $logger;
 
     /** @var string */
     private $configDir;
@@ -84,7 +88,6 @@ class Driver implements DriverInterface
             /* @var $gDrive Driver */
             $gDrive = $data['root']->getDriver();
             $gDrive->updateToken = $data['token'];
-            $gDrive->createOrUpdateEntries();
         }
 
         else {
@@ -108,6 +111,17 @@ class Driver implements DriverInterface
     {
         $this->configDir = \realpath($configDir);
         $this->applicationName = $applicationName;
+    }
+
+
+    /**
+     * Enable logging
+     *
+     * @param LoggerInterface $logger
+     */
+    public function setLogger(LoggerInterface $logger)
+    {
+        $this->logger = $logger;
     }
 
 
@@ -278,10 +292,7 @@ class Driver implements DriverInterface
      */
     final public function getRoot() : Folder
     {
-        if (!$this->root) {
-            $this->createOrUpdateEntries();
-        }
-
+        $this->createOrUpdateEntries();
         return $this->root;
     }
 
@@ -441,11 +452,15 @@ class Driver implements DriverInterface
                 }
 
                 elseif ($change->removed || ($file && $file->trashed)) {
+                    $this->logger && $this->logger->debug(\sprintf("%s: file %s deleted", __FUNCTION__, $change->fileId));
                     yield ['id' => $change->fileId, 'deleted' => true];
                 }
 
                 else {
-                    yield $this->fileToArray($file);
+                    $fileData = $this->fileToArray($file);
+                    $this->logger && $this->logger->debug(\sprintf("%s: file %s changed or created", __FUNCTION__, $change->fileId), $fileData);
+
+                    yield $fileData;
                 }
             }
 
