@@ -124,10 +124,19 @@ class FileUpload
                 $this->folder->getChild($this->name)->delete();
             }
 
-            $this->driver->createOrUpdateEntries();
-            return $this->folder->getChild($this->name);
-        } else {
-            throw new \RuntimeException("File upload failed");
+            for ($i=0; $i<30; $i++) {
+                $this->driver->createOrUpdateEntries();
+
+                if ($this->folder->hasChild($this->name)) {
+                    return $this->folder->getChild($this->name);
+                }
+
+                echo "Waiting for google to see my uploaded file ...\n";
+                sleep(1);
+            }
+
         }
+
+        throw new \RuntimeException("File upload failed");
     }
 }
