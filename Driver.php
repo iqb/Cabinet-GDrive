@@ -526,8 +526,8 @@ class Driver implements DriverInterface
             throw new \RuntimeException('Failed to upload file "' . $sourceFile->getName() . "'");
         }
 
-        /* @var $status \Google_Service_Drive_DriveFile */
-        return $this->fileFactory($status->name, $parent, $status->id, $status->size, $status->md5Checksum);
+        $this->createOrUpdateEntries();
+        return $this->entryList[$status->id];
     }
 
 
@@ -559,7 +559,7 @@ class Driver implements DriverInterface
      */
     final public function createFolder(Folder $parent, $name) : Folder
     {
-        $this->getClient()->setDefer(false);
+        $this->refreshConnection();
 
         $file = new \Google_Service_Drive_DriveFile([
             'name' => $name,
@@ -567,7 +567,7 @@ class Driver implements DriverInterface
             'parents' => [ $parent->id ],
         ]);
 
-        $this->refreshConnection();
+        $this->getClient()->setDefer(false);
         $status = $this->getDriveService()->files->create($file, [
             'fields' => self::FILE_FETCH_FIELDS,
         ]);
@@ -576,8 +576,8 @@ class Driver implements DriverInterface
             throw new \RuntimeException('Failed to create folder "' . $name . "'");
         }
 
-        /* @var $status \Google_Service_Drive_DriveFile */
-        return $this->folderFactory($status->name, $parent, $status->id);
+        $this->createOrUpdateEntries();
+        return $this->entryList[$status->id];
     }
 
 
