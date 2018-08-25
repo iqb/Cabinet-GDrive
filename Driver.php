@@ -211,14 +211,16 @@ class Driver implements DriverInterface
      */
     final public function refreshConnection() : bool
     {
-        // Refresh the token if it's expired.
-        if ($this->client && $this->client->isAccessTokenExpired()) {
-            $oldDefer = $this->client->shouldDefer();
-            $this->client->setDefer(false);
-            $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
-            $this->client->setDefer($oldDefer);
+        $client = $this->getClient();
 
-            $this->config['access_token'] = $this->client->getAccessToken();
+        // Refresh the token if it's expired.
+        if ($client->isAccessTokenExpired()) {
+            $oldDefer = $client->shouldDefer();
+            $client->setDefer(false);
+            $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+            $client->setDefer($oldDefer);
+
+            $this->config['access_token'] = $client->getAccessToken();
 
             \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
 
