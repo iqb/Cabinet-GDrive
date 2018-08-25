@@ -215,17 +215,21 @@ class Driver implements DriverInterface
 
         // Refresh the token if it's expired.
         if ($client->isAccessTokenExpired()) {
+            $this->logger && $this->logger->debug(\sprintf('%s: refreshing GDrive access token', __FUNCTION__), $client->getAccessToken());
+
             $oldDefer = $client->shouldDefer();
             $client->setDefer(false);
             $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
             $client->setDefer($oldDefer);
 
+            $this->logger && $this->logger->debug(\sprintf('%s: received new GDrive access token', __FUNCTION__), $client->getAccessToken());
             $this->config['access_token'] = $client->getAccessToken();
 
             \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
 
             return true;
         } else {
+            $this->logger && $this->logger->debug(\sprintf('%s: GDrive access token still valid', __FUNCTION__), $client->getAccessToken());
             return false;
         }
     }
