@@ -77,8 +77,9 @@ class Driver implements DriverInterface
     {
         if (\file_exists($configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE)) {
             $data = \igbinary_unserialize(\file_get_contents($configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE));
-            /* @var $gDrive Driver */
-            $gDrive = $data['root']->getDriver();
+            /* @var $root Folder */
+            $root = $data['root'];
+            $gDrive = $root->getDriver();
             $gDrive->updateToken = $data['token'];
         }
 
