@@ -126,8 +126,12 @@ class HttpWrapper
     }
 
 
-    private function refreshAccessToken()
+    private function refreshAccessToken($forceRefresh = false)
     {
+        if (!$this->client) {
+            return;
+        }
+
         $changed = false;
 
         if (!$this->accessToken) {
@@ -142,7 +146,7 @@ class HttpWrapper
         }
         $this->client->setAccessToken($this->accessToken);
 
-        if ($this->client->isAccessTokenExpired()) {
+        if ($forceRefresh || $this->client->isAccessTokenExpired()) {
             $this->logger && $this->logger->debug(__FUNCTION__ . ': new access token acquired');
             $this->accessToken = $this->client->fetchAccessTokenWithRefreshToken();
             $changed = true;
@@ -189,11 +193,11 @@ class HttpWrapper
      */
     private function retryApiCall(callable $call, ...$params)
     {
-        $client = $this->getClient();
+        $timeout = 100000;
 
         for ($try = 1; $try <= $this->tries; $try++) {
             try {
-                $this->refreshAccessToken();
+                $this->refreshAccessToken($try > 1);
 
                 return $call(...$params);
 
@@ -201,8 +205,9 @@ class HttpWrapper
                 if ($e->getCode() !== 401) {
                     throw $e;
                 } else {
-                    $this->logger && $this->logger->debug(__FUNCTION__ . ': API token expired unexpectedly, refreshing token and retrying.');
-                    $this->refreshAccessToken();
+                    $this->logger && $this->logger->debug(__FUNCTION__ . ': API token expired unexpectedly, refreshing token and retrying. (try ' . $try . ' of ' . $this->tries . ')');
+                    \usleep($timeout);
+                    $timeout *= 2;
                 }
             }
         }
