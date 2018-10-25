@@ -242,6 +242,8 @@ class Driver implements DriverInterface
         $this->logger && $this->logger->debug(__FUNCTION__ . ": fetching " . ($this->updateToken ? "file updates" : "files"));
         $processedUpdates = 0;
 
+        $dangling = [];
+
         foreach ($entryGenerator as $file) {
             $processedUpdates++;
             $this->logger && (($processedUpdates % 1000) === 0)
@@ -285,7 +287,12 @@ class Driver implements DriverInterface
             }
 
             else {
-                $parent = $this->entryList[$file['parentId']];
+                if (isset($this->entryList[$file['parentId']])) {
+                    $parent = $this->entryList[$file['parentId']];
+                } else {
+                    $parent = null;
+                    $dangling[$file['id']] = $file['parentId'];
+                }
 
                 if ($file['mimeType'] === self::FOLDER_MIME_TYPE) {
                     $this->entryList[$file['id']] = $this->folderFactory($file['name'], $parent, $file['id'], $file['properties']);
@@ -293,6 +300,18 @@ class Driver implements DriverInterface
 
                 else {
                     $this->entryList[$file['id']] = $this->fileFactory($file['name'], $parent, $file['id'], $file['size'], $file['md5'], $file['properties']);
+                }
+            }
+        }
+
+        if (\count($dangling)) {
+            $accessor = function(Folder $parent) { $this->setParent($parent); };
+
+            foreach ($dangling as $fileId => $parentId) {
+                if (isset($this->entryList[$parentId])) {
+                    $accessor->call($this->entryList[$fileId], $this->entryList[$parentId]);
+                } else {
+                    $this->logger && $this->logger->warning(__FUNCTION__ . ": unreachable parent $parentId for entry $fileId (" . $this->entryList[$fileId]->getName() . ")");
                 }
             }
         }

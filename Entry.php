@@ -120,7 +120,9 @@ abstract class Entry implements EntryInterface
 
     final protected function setParent(Folder $parent)
     {
-        unset($this->parent->entries[$this->id]);
+        if ($this->parent) {
+            unset($this->parent->entries[$this->id]);
+        }
         $this->parent = $parent;
         $this->parent->entries[$this->id] = $this;
     }
