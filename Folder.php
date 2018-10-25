@@ -90,11 +90,11 @@ class Folder extends Entry implements FolderInterface
      *
      * @param string $fileName
      * @param int $fileSize
-     * @return FileUpload
+     * @return callable
      */
-    public function upload(string $fileName, int $fileSize) : FileUpload
+    public function upload(string $fileName, int $fileSize) : callable
     {
-        return new FileUpload($this->driver, $this, $fileName, $fileSize);
+        return $this->driver->uploadFileChunked($this, $fileName, $fileSize);
     }
 
 

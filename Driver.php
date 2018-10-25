@@ -19,9 +19,8 @@ class Driver implements DriverInterface
 {
     use DriverHandlerTrait;
 
-    const CLIENT_SECRET_FILE = 'client_id.json';
-
-    const CONFIG_FILE        = 'config.json';
+    const CLIENT_SECRET_FILE = 'gdrive_client_id.json';
+    const ACCESS_TOKEN_FILE  = 'gdrive_access_token.json';
     const FILES_CACHE_FILE   = 'files.cache';
 
     const DEFAULT_CHUNK_SIZE = 64 * 1024 * 1024;
@@ -38,18 +37,6 @@ class Driver implements DriverInterface
 
     /** @var string */
     private $applicationName;
-
-    /** @var \Google_Client */
-    private $client;
-
-    /** @var \Google_Service_Drive */
-    private $service;
-
-    /** @var array */
-    private $config;
-
-    /** @var bool */
-    private $configChanged = false;
 
     /** @var Folder */
     private $root;
@@ -72,6 +59,11 @@ class Driver implements DriverInterface
      * @see DriverInterface::createFolder()
      */
     private $folderFactory;
+
+    /**
+     * @var HttpWrapper
+     */
+    private $clientWrapper;
 
 
     /**
@@ -111,6 +103,7 @@ class Driver implements DriverInterface
     {
         $this->configDir = \realpath($configDir);
         $this->applicationName = $applicationName;
+        $this->clientWrapper = new HttpWrapper($configDir . '/' . self::CLIENT_SECRET_FILE, $configDir . '/' . self::ACCESS_TOKEN_FILE);
     }
 
 
@@ -122,116 +115,7 @@ class Driver implements DriverInterface
     public function setLogger(LoggerInterface $logger)
     {
         $this->logger = $logger;
-    }
-
-
-    /**
-     * @return \Google_Client
-     */
-    final public function getClient() : \Google_Client
-    {
-        if (!$this->client) {
-            // Restore config
-            if (!\is_array($this->config)) {
-                if (\file_exists($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE)) {
-                    $this->config = \json_decode(\file_get_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE),
-                        true);
-                    $this->configChanged = false;
-                } else {
-                    $this->config = [];
-                    $this->configChanged = true;
-                }
-            }
-
-            if (!\array_key_exists('client_id', $this->config)) {
-                $clientSecretFile = $this->configDir . \DIRECTORY_SEPARATOR . self::CLIENT_SECRET_FILE;
-                if (!\file_exists($clientSecretFile)) {
-                    throw new \RuntimeException("Client ID not found. Please download client_id.json from Google Delevoper Zone and put it into the config directory.");
-                }
-
-                $this->config['client_id'] = \json_decode(\file_get_contents($clientSecretFile), true);
-                $this->configChanged = true;
-            }
-
-            $this->client = new \Google_Client();
-            if ($this->applicationName) {
-                $this->client->setApplicationName($this->applicationName);
-            }
-            $this->client->setScopes([\Google_Service_Drive::DRIVE]);
-            $this->client->setAuthConfig($this->config['client_id']);
-            $this->client->setAccessType('offline');
-
-            if (!\array_key_exists('access_token', $this->config)) {
-                // Request authorization from the user.
-                $authUrl = $this->client->createAuthUrl();
-                \printf("Open the following link in your browser:\n%s\n", $authUrl);
-                print 'Enter verification code: ';
-                $authCode = \trim(\fgets(STDIN));
-
-                // Exchange authorization code for an access token.
-                $this->config['access_token'] = $this->client->fetchAccessTokenWithAuthCode($authCode);
-                $this->configChanged = true;
-            }
-            $this->client->setAccessToken($this->config['access_token']);
-        }
-
-        // Refresh the token if it's expired.
-        if ($this->client->isAccessTokenExpired()) {
-            $this->client->fetchAccessTokenWithRefreshToken($this->client->getRefreshToken());
-            $this->config['access_token'] = $this->client->getAccessToken();
-            $this->configChanged = true;
-        }
-
-        if ($this->configChanged) {
-            \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
-            $this->configChanged = false;
-        }
-
-        return $this->client;
-    }
-
-
-    /**
-     * @return \Google_Service_Drive
-     */
-    final public function getDriveService() : \Google_Service_Drive
-    {
-        if (!$this->service) {
-            $this->service = new \Google_Service_Drive($this->getClient());
-        }
-
-        return $this->service;
-    }
-
-
-    /**
-     * Refresh the access token, call before a direct call to
-     *
-     * @return bool Whether the access token was refreshed
-     */
-    final public function refreshConnection() : bool
-    {
-        $client = $this->getClient();
-
-        // Refresh the token if it's expired.
-        if ($client->isAccessTokenExpired()) {
-            $this->logger && $this->logger->debug(\sprintf('%s: refreshing GDrive access token', __FUNCTION__), $client->getAccessToken());
-
-            $oldDefer = $client->shouldDefer();
-            $client->setDefer(false);
-            $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-            $client->setDefer($oldDefer);
-
-            $this->logger && $this->logger->debug(\sprintf('%s: received new GDrive access token', __FUNCTION__), $client->getAccessToken());
-            $this->config['access_token'] = $client->getAccessToken();
-
-            \file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::CONFIG_FILE, \json_encode($this->config, \JSON_PRETTY_PRINT));
-
-            return true;
-        } else {
-            $this->logger && $this->logger->debug(\sprintf('%s: GDrive access token still valid', __FUNCTION__), $client->getAccessToken());
-            return false;
-        }
+        $this->clientWrapper->setLogger($logger);
     }
 
 
@@ -302,6 +186,44 @@ class Driver implements DriverInterface
         return $this->root;
     }
 
+    /**
+     * @param string $fileOrFolderId
+     * @param callable|null $propertyChecker
+     * @return bool
+     */
+    final protected function waitForUpdate(string $fileOrFolderId, callable $propertyChecker = null) : bool
+    {
+        $waitForCreate = !isset($this->entryList[$fileOrFolderId]);
+        $waitForUpdate = (!$waitForCreate && ($propertyChecker !== null));
+
+        for ($i=0; $i<60; $i++) {
+            $this->logger && $this->logger->debug(__FUNCTION__ . " waiting for Google to see the " . ($waitForCreate ? 'creation' : ($waitForUpdate ? 'update' : 'deletion')) . " of file/folder $fileOrFolderId");
+            $this->createOrUpdateEntries();
+
+            if ($waitForCreate) {
+                if (isset($this->entryList[$fileOrFolderId])) {
+                    return true;
+                }
+            }
+
+            elseif ($waitForUpdate) {
+                if ($propertyChecker($this->entryList[$fileOrFolderId])) {
+                    return true;
+                }
+            }
+
+            else {
+                if (!$this->entryList[$fileOrFolderId]) {
+                    return true;
+                }
+            }
+
+            \usleep(500000);
+        }
+
+        return false;
+    }
+
 
     /**
      * Create or update the Entry structure representing the files in the GDrive.
@@ -317,7 +239,14 @@ class Driver implements DriverInterface
         // Store deletes here and invoke later
         $deletes = [];
 
+        $this->logger && $this->logger->debug(__FUNCTION__ . ": fetching " . ($this->updateToken ? "file updates" : "files"));
+        $processedUpdates = 0;
+
         foreach ($entryGenerator as $file) {
+            $processedUpdates++;
+            $this->logger && (($processedUpdates % 1000) === 0)
+                && $this->logger->debug(__FUNCTION__ . ": processed $processedUpdates " . ($this->updateToken ? "file updates" : "files"));
+
             // Handle changes to existing files
             if (isset($this->entryList[$file['id']])) {
                 $entry = $this->entryList[$file['id']];
@@ -373,6 +302,8 @@ class Driver implements DriverInterface
         }
 
         $this->updateToken = $entryGenerator->getReturn();
+        $this->logger && $this->logger->debug(__FUNCTION__ . ": finished $processedUpdates " . ($this->updateToken ? "file updates" : "files") . ", new status: " . $this->updateToken);
+
         if (\file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, \igbinary_serialize(['token' => $this->updateToken, 'root' => $this->root]))) {
             \copy($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, $this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE);
         }
@@ -389,19 +320,16 @@ class Driver implements DriverInterface
     private function fetchFileList() : \Traversable
     {
         // Get current state of the drive
-        $lastChangesStartPageToken = $this->getDriveService()->changes->getStartPageToken()->startPageToken;
+        $lastChangesStartPageToken = $this->clientWrapper->getChangesStartPageToken();
 
         // Get root folder
-        $this->refreshConnection();
-        yield $this->fileToArray($this->getDriveService()->files->get('root', [
+        yield $this->clientWrapper->getRootFile([
             'fields' => self::FILE_FETCH_FIELDS,
-        ]));
+        ]);
 
         $nextPageToken = null;
-        $this->getClient()->setDefer(false);
         do {
-            $this->refreshConnection();
-            $results = $this->getDriveService()->files->listFiles([
+            $results = $this->clientWrapper->listFiles([
                 'orderBy' => 'createdTime',
                 'pageSize' => 1000,
                 'fields' => 'nextPageToken, files(' . self::FILE_FETCH_FIELDS . ')',
@@ -439,10 +367,7 @@ class Driver implements DriverInterface
     {
         $nextPageToken = $this->updateToken;
         do {
-            $this->refreshConnection();
-
-            $this->getClient()->setDefer(false);
-            $results = $this->getDriveService()->changes->listChanges($nextPageToken, [
+            $results = $this->clientWrapper->listChanges($nextPageToken, [
                 'spaces' => 'drive',
                 'pageSize' => 1000,
                 'fields' => 'newStartPageToken, nextPageToken, changes/type, changes/removed, changes/fileId, changes/time, changes/file(' . self::FILE_FETCH_FIELDS . ')',
@@ -496,33 +421,19 @@ class Driver implements DriverInterface
         }
 
         $fileSize = $sourceFile->getSize();
-        $file = new \Google_Service_Drive_DriveFile([
-            'name' => ($overrideFileName !== null ? $overrideFileName : $sourceFile->getName()),
-            'parents' => [ $parent->id ],
-        ]);
-
-        $this->getClient()->setDefer(true);
-        $request = $this->getDriveService()->files->create($file, [
-            'fields' => self::FILE_FETCH_FIELDS,
-        ]);
-
-        // Create a media file upload to represent our upload process.
-        $media = new \Google_Http_MediaFileUpload(
-            $this->getClient(),
-            $request,
-            self::DEFAULT_MIME_TYPE,
-            null,
-            true,
+        $upload = $this->uploadFileChunked(
+            $parent,
+            ($overrideFileName !== null ? $overrideFileName : $sourceFile->getName()),
+            $fileSize,
             $chunkSize
         );
-        $media->setFileSize($fileSize);
 
         $readPos = 0;
         $fileHandle = \fopen($sourceFile->getPath(), 'rb');
         do {
             $chunk = \stream_get_contents($fileHandle, $chunkSize);
             $readPos += \mb_strlen($chunk, '8bit');
-            $status = $media->nextChunk($chunk);
+            $status = $upload(chunk);
 
             $progressCallback && $progressCallback($sourceFile, $readPos, $fileSize);
         } while (!$status && !\feof($fileHandle));
@@ -532,8 +443,59 @@ class Driver implements DriverInterface
             throw new \RuntimeException('Failed to upload file "' . $sourceFile->getName() . "'");
         }
 
-        $this->createOrUpdateEntries();
-        return $this->entryList[$status->id];
+        return $status;
+    }
+
+
+    /**
+     * Start an upload for a new file in the $parent folder.
+     * Returns a callable that must be called for each chunk of data.
+     * The callable will return null until all chunks have been processed,
+     *  then it will return the new File object
+     *
+     * @param Folder $parent
+     * @param string $fileName
+     * @param int $fileSize
+     * @param int $chunkSize
+     * @return callable
+     */
+    final public function uploadFileChunked(Folder $parent, string $fileName, int $fileSize, int $chunkSize = self::DEFAULT_CHUNK_SIZE) : callable
+    {
+        $mediaFileUpload = $this->clientWrapper->fileUploadStart(
+            $fileName,
+            $parent->id,
+            $fileSize,
+            $chunkSize,
+            [
+                'fields' => self::FILE_FETCH_FIELDS,
+            ]
+        );
+
+        $processedBytes = 0;
+        $buffer = "";
+
+        return function(string $chunk) use ($parent, $fileName, $fileSize, $chunkSize, $mediaFileUpload, &$processedBytes, &$buffer) {
+            $buffer .= $chunk;
+            $processedBytes += \strlen($chunk);
+
+            // Upload only complete chunk and last chunk
+            if (\strlen($buffer) >= $chunkSize || ($processedBytes >= $fileSize)) {
+                $result = $this->clientWrapper->fileUploadNextChunk($mediaFileUpload, $buffer);
+                $buffer = "";
+
+                if ($result instanceof \Google_Service_Drive_DriveFile) {
+                    if ($this->waitForUpdate($result->getId())) {
+                        return $this->entryList[$result->getId()];
+                    } else {
+                        throw new \RuntimeException("Timeout waiting for new File to appear in Google Drive.");
+                    }
+                }
+
+                elseif ($processedBytes >= $fileSize) {
+                    throw new \RuntimeException("Upload failed");
+                }
+            }
+        };
     }
 
 
@@ -545,14 +507,7 @@ class Driver implements DriverInterface
      */
     final public function downloadFile(File $file)
     {
-        $this->refreshConnection();
-        $this->getClient()->setDefer(true);
-
-        /* @var $httpClient \GuzzleHttp\Client */
-        $httpClient = $this->getClient()->authorize();
-        $request = $this->getDriveService()->files->get($file->id, ['alt' => 'media']);
-        $response = $httpClient->send($request, ['stream' => true]);
-        return $response->getBody()->detach();
+        return $this->clientWrapper->fileDownload($file->id);
     }
 
 
@@ -565,25 +520,15 @@ class Driver implements DriverInterface
      */
     final public function createFolder(Folder $parent, $name) : Folder
     {
-        $this->refreshConnection();
-
-        $file = new \Google_Service_Drive_DriveFile([
-            'name' => $name,
-            'mimeType' => self::FOLDER_MIME_TYPE,
-            'parents' => [ $parent->id ],
-        ]);
-
-        $this->getClient()->setDefer(false);
-        $status = $this->getDriveService()->files->create($file, [
+        $folder = $this->clientWrapper->createFolder($parent->id, $name, [
             'fields' => self::FILE_FETCH_FIELDS,
         ]);
 
-        if (!$status) {
+        if ($folder && $this->waitForUpdate($folder->getId())) {
+            return $this->entryList[$folder->getId()];
+        } else {
             throw new \RuntimeException('Failed to create folder "' . $name . "'");
         }
-
-        $this->createOrUpdateEntries();
-        return $this->entryList[$status->id];
     }
 
 
@@ -596,10 +541,8 @@ class Driver implements DriverInterface
     final protected function deleteFile(string $id)
     {
         if (isset($this->entryList[$id])) {
-            $this->refreshConnection();
-            $this->getClient()->setDefer(false);
-            $this->getDriveService()->files->delete($id);
-            unset($this->entryList[$id]);
+            $this->clientWrapper->deleteFile($id);
+            $this->waitForUpdate($id);
         }
     }
 
@@ -627,8 +570,7 @@ class Driver implements DriverInterface
             $params['removeParents'] = \implode(',', \array_diff($oldParents, $newParents));
         }
 
-        $this->refreshConnection();
-        return ($this->getDriveService()->files->update($id, $file, $params) !== false);
+        return $this->clientWrapper->updateFileMetadata($id, $file, $params);
     }
 
 
@@ -659,6 +601,7 @@ class Driver implements DriverInterface
             'configDir',
             'root',
             'entryList',
+            'clientWrapper',
             'fileFactory',
             'folderFactory',
         ];
