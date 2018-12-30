@@ -214,7 +214,7 @@ class Driver implements DriverInterface
             }
 
             else {
-                if (!$this->entryList[$fileOrFolderId]) {
+                if (empty($this->entryList[$fileOrFolderId])) {
                     return true;
                 }
             }
