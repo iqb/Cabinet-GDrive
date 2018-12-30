@@ -590,7 +590,10 @@ class Driver implements DriverInterface
             $params['removeParents'] = \implode(',', \array_diff($oldParents, $newParents));
         }
 
-        return $this->clientWrapper->updateFileMetadata($id, $file, $params);
+        if ($this->clientWrapper->updateFileMetadata($id, $file, $params)) {
+            $this->waitForUpdate($id);
+            return true;
+        }
     }
 
 
