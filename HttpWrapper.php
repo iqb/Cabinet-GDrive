@@ -73,7 +73,7 @@ class HttpWrapper
      */
     private $logger;
 
-    public $tries = 2;
+    public $tries = 10;
 
 
     public function __construct($clientSecret, $accessToken = null)
@@ -193,23 +193,28 @@ class HttpWrapper
      */
     private function retryApiCall(callable $call, ...$params)
     {
-        $timeout = 100000;
+        $baseTimeout = $timeout = 100000;
 
         for ($try = 1; $try <= $this->tries; $try++) {
             try {
                 $this->refreshAccessToken($try > 1);
 
-                return $call(...$params);
-
+                $result = $call(...$params);
+                if ($result !== null) {
+                    return $result;
+                } else {
+                    $this->logger && $this->logger->debug(__FUNCTION__ . ': call returned null, retrying. (try ' . $try . ' of ' . $this->tries . ')');
+                }
             } catch (\Google_Service_Exception $e) {
                 if ($e->getCode() !== 401) {
                     throw $e;
                 } else {
                     $this->logger && $this->logger->debug(__FUNCTION__ . ': API token expired unexpectedly, refreshing token and retrying. (try ' . $try . ' of ' . $this->tries . ')');
-                    \usleep($timeout);
-                    $timeout *= 2;
                 }
             }
+
+            \usleep($timeout);
+            $timeout += $baseTimeout;
         }
     }
 
