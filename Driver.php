@@ -376,9 +376,9 @@ class Driver implements DriverInterface
         $lastChangesStartPageToken = $this->clientWrapper->getChangesStartPageToken();
 
         // Get root folder
-        yield $this->clientWrapper->getRootFile([
+        yield $this->fileToArray($this->clientWrapper->getRootFile([
             'fields' => self::FILE_FETCH_FIELDS,
-        ]);
+        ]));
 
         $nextPageToken = null;
         do {
