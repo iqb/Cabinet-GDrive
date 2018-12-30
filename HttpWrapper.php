@@ -193,7 +193,7 @@ class HttpWrapper
      */
     private function retryApiCall(callable $call, ...$params)
     {
-        $baseTimeout = $timeout = 100000;
+        $baseTimeout = $timeout = 250000;
 
         for ($try = 1; $try <= $this->tries; $try++) {
             try {
