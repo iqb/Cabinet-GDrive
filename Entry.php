@@ -37,6 +37,16 @@ abstract class Entry implements EntryInterface
     public $parent;
 
     /**
+     * @var \DateTimeImmutable
+     */
+    private $created;
+
+    /**
+     * @var \DateTimeImmutable
+     */
+    private $modified;
+
+    /**
      * @var string[]
      */
     public $properties;
@@ -47,12 +57,14 @@ abstract class Entry implements EntryInterface
     protected $driver;
 
 
-    public function __construct(Driver $driver, Folder $parent = null, string $id, string $name, array $properties = null)
+    public function __construct(Driver $driver, Folder $parent = null, string $id, string $name, \DateTimeInterface $created, \DateTimeInterface $modified, array $properties = null)
     {
         $this->driver = $driver;
         $this->parent = $parent;
         $this->id = $id;
         $this->name = $name;
+        $this->setCreated($created);
+        $this->setModified($modified);
         $this->properties = ($properties ?: []);
 
         $parent->entries[$id] = $this;
@@ -94,6 +106,36 @@ abstract class Entry implements EntryInterface
     final protected function setName(string $newName)
     {
         $this->name = $newName;
+    }
+
+
+    /**
+     * @return \DateTimeInterface
+     */
+    final public function getCreated() : \DateTimeInterface
+    {
+        return $this->created;
+    }
+
+
+    final protected function setCreated(\DateTimeInterface $created)
+    {
+        $this->created = ($created instanceof \DateTimeImmutable ? $created : \DateTimeImmutable::createFromMutable($created));
+    }
+
+
+    /**
+     * @return \DateTimeInterface
+     */
+    final public function getModified() : \DateTimeInterface
+    {
+        return $this->modified;
+    }
+
+
+    final protected function setModified(\DateTimeInterface $modified)
+    {
+        $this->modified = ($modified instanceof \DateTimeImmutable ? $modified : \DateTimeImmutable::createFromMutable($modified));
     }
 
 

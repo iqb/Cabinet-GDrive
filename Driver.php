@@ -27,7 +27,7 @@ class Driver implements DriverInterface
     const DEFAULT_MIME_TYPE  = 'application/octet-stream';
     const FOLDER_MIME_TYPE   = 'application/vnd.google-apps.folder';
 
-    const FILE_FETCH_FIELDS  = 'id, name, md5Checksum, parents, size, mimeType, modifiedTime, originalFilename, trashed, properties';
+    const FILE_FETCH_FIELDS  = 'id, name, md5Checksum, parents, size, mimeType, createdTime, modifiedTime, originalFilename, trashed, properties';
 
     /** @var LoggerInterface */
     private $logger;
@@ -121,12 +121,12 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, int $size = null, string $md5 = null, array $properties = null) : FileInterface
+    final public function fileFactory(string $fileName, FolderInterface $parent = null, string $id = null, \DateTimeInterface $created = null, \DateTimeInterface $modified = null, int $size = null, string $md5 = null, array $properties = null) : FileInterface
     {
         if ($this->fileFactory) {
-            $file = ($this->fileFactory)($this, $parent, $id, $fileName, $size, $md5, $properties);
+            $file = ($this->fileFactory)($this, $parent, $id, $fileName, $created, $modified, $size, $md5, $properties);
         } else {
-            $file = new File($this, $parent, $id, $fileName, $size, $md5, $properties);
+            $file = new File($this, $parent, $id, $fileName, $created, $modified, $size, $md5, $properties);
         }
 
         $this->notifyFileLoaded($file);
@@ -142,12 +142,12 @@ class Driver implements DriverInterface
 
 
     /** @inheritdoc */
-    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null, array $properties = null) : FolderInterface
+    final public function folderFactory(string $folderName, FolderInterface $parent = null, string $id = null, \DateTimeInterface $created = null, \DateTimeInterface $modified = null, array $properties = null) : FolderInterface
     {
         if ($this->folderFactory) {
-            $folder = ($this->folderFactory)($this, $parent, $id, $folderName, $properties);
+            $folder = ($this->folderFactory)($this, $parent, $id, $folderName, $created, $modified, $properties);
         } else {
-            $folder = new Folder($this, $parent, $id, $folderName, $properties);
+            $folder = new Folder($this, $parent, $id, $folderName, $created, $modified, $properties);
         }
 
         $this->notifyFolderLoaded($folder);
@@ -235,6 +235,8 @@ class Driver implements DriverInterface
     {
         $entryGenerator = ($this->updateToken ? $this->fetchUpdateList() : $this->fetchFileList());
         $setName = function(string $newName) { return $this->setName($newName); };
+        $setCreated = function(\DateTimeImmutable $created) { return $this->setCreated($created); };
+        $setModified = function(\DateTimeImmutable $modified) { return $this->setModified($modified); };
         $setParent = function(FolderInterface $newParent) { return $this->setParent($newParent); };
 
         // Store deletes here and invoke later
@@ -265,14 +267,22 @@ class Driver implements DriverInterface
 
                 // Move
                 if ($entry->hasParents() && $entry->getParent()->id !== $file['parentId']) {
-                    $setParentBound = $setParent->bindTo($entry, $entry);
-                    $setParentBound($this->entryList[$file['parentId']]);
+                    ($setParent->bindTo($entry, $entry))($this->entryList[$file['parentId']]);
                 }
 
-                // Rename
+                // Name changed
                 if ($entry->getName() !== $file['name']) {
-                    $setNameBound = $setName->bindTo($entry, $entry);
-                    $setNameBound($file['name']);
+                    ($setName->bindTo($entry, $entry))($file['name']);
+                }
+
+                // Created changed
+                if ($entry->getCreated() != $file['created']) {
+                    ($setCreated->bindTo($entry, $entry))($file['created']);
+                }
+
+                // Modified changed
+                if ($entry->getModified() != $file['modified']) {
+                    ($setModified->bindTo($entry, $entry))($file['modified']);
                 }
 
                 $entry->properties = $file['properties'];
@@ -284,7 +294,14 @@ class Driver implements DriverInterface
 
             // Root
             elseif (!$file['parentId']) {
-                $this->entryList[$file['id']] = $this->root = $this->folderFactory($file['name'], null, $file['id'], $file['properties']);
+                $this->entryList[$file['id']] = $this->root = $this->folderFactory(
+                    $file['name'],
+                    null,
+                    $file['id'],
+                    $file['created'],
+                    $file['modified'],
+                    $file['properties']
+                );
             }
 
             else {
@@ -296,11 +313,27 @@ class Driver implements DriverInterface
                 }
 
                 if ($file['mimeType'] === self::FOLDER_MIME_TYPE) {
-                    $this->entryList[$file['id']] = $this->folderFactory($file['name'], $parent, $file['id'], $file['properties']);
+                    $this->entryList[$file['id']] = $this->folderFactory(
+                        $file['name'],
+                        $parent,
+                        $file['id'],
+                        $file['created'],
+                        $file['modified'],
+                        $file['properties']
+                    );
                 }
 
                 else {
-                    $this->entryList[$file['id']] = $this->fileFactory($file['name'], $parent, $file['id'], $file['size'], $file['md5'], $file['properties']);
+                    $this->entryList[$file['id']] = $this->fileFactory(
+                        $file['name'],
+                        $parent,
+                        $file['id'],
+                        $file['created'],
+                        $file['modified'],
+                        $file['size'],
+                        $file['md5'],
+                        $file['properties']
+                    );
                 }
             }
         }
@@ -453,7 +486,7 @@ class Driver implements DriverInterface
         do {
             $chunk = \stream_get_contents($fileHandle, $chunkSize);
             $readPos += \mb_strlen($chunk, '8bit');
-            $status = $upload(chunk);
+            $status = $upload($chunk);
 
             $progressCallback && $progressCallback($sourceFile, $readPos, $fileSize);
         } while (!$status && !\feof($fileHandle));
@@ -590,10 +623,15 @@ class Driver implements DriverInterface
             $params['removeParents'] = \implode(',', \array_diff($oldParents, $newParents));
         }
 
+        $beforeUpdateTime = new \DateTimeImmutable();
         if ($this->clientWrapper->updateFileMetadata($id, $file, $params)) {
-            $this->waitForUpdate($id);
+            $this->waitForUpdate($id, function(Entry $entry) use ($beforeUpdateTime) {
+                return ($entry->getModified() >= $beforeUpdateTime);
+            });
             return true;
         }
+
+        return false;
     }
 
 
@@ -605,12 +643,15 @@ class Driver implements DriverInterface
      */
     final private function fileToArray(\Google_Service_Drive_DriveFile $file) : array
     {
+        $format = 'Y-m-d\TH:i:s.uP';
+
         return [
             'id' => $file->id,
             'name' => $file->name,
             'md5' => $file->md5Checksum,
             'size' => $file->size,
-            'modified' => $file->modifiedTime,
+            'created' => \DateTimeImmutable::createFromFormat($format, $file->createdTime),
+            'modified' => \DateTimeImmutable::createFromFormat($format, $file->modifiedTime),
             'mimeType' => $file->mimeType,
             'properties' => $file->properties,
             'parentId' => (\is_array($file->parents) && \count($file->parents) ? $file->parents[0] : null),
