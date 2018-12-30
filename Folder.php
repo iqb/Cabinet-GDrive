@@ -59,7 +59,7 @@ class Folder extends Entry implements FolderInterface
             }
         }
 
-        return null;
+        throw new \InvalidArgumentException("No file with name '$name' exists in this folder");
     }
 
 
