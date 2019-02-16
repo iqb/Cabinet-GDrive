@@ -193,7 +193,7 @@ class HttpWrapper
      */
     private function retryApiCall(callable $call, ...$params)
     {
-        $baseTimeout = $timeout = 250000;
+        $timeout = 100000;
 
         for ($try = 1; $try <= $this->tries; $try++) {
             try {
@@ -202,6 +202,8 @@ class HttpWrapper
                 $result = $call(...$params);
                 if ($result !== null) {
                     return $result;
+                } elseif ($try === $this->tries) {
+                    throw new \RuntimeException("Api call retry failed.");
                 } else {
                     $this->logger && $this->logger->debug(__FUNCTION__ . ': call returned null, retrying. (try ' . $try . ' of ' . $this->tries . ')');
                 }
@@ -214,7 +216,7 @@ class HttpWrapper
             }
 
             \usleep($timeout);
-            $timeout += $baseTimeout;
+            $timeout <<= 1;
         }
     }
 
