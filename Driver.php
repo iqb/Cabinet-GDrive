@@ -358,7 +358,7 @@ class Driver implements DriverInterface
         $this->logger && $this->logger->debug(__FUNCTION__ . ": finished $processedUpdates " . ($this->updateToken ? "file updates" : "files") . ", new status: " . $this->updateToken);
 
         if (\file_put_contents($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, \igbinary_serialize(['token' => $this->updateToken, 'root' => $this->root]))) {
-            \copy($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, $this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE);
+            \rename($this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE . '-' . $this->updateToken, $this->configDir . \DIRECTORY_SEPARATOR . self::FILES_CACHE_FILE);
         }
     }
 
