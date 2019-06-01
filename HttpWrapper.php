@@ -10,6 +10,7 @@
 
 namespace Iqb\Cabinet\GDrive;
 
+use GuzzleHttp\Psr7\Request;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -208,10 +209,18 @@ class HttpWrapper
                     $this->logger && $this->logger->debug(__FUNCTION__ . ': call returned null, retrying. (try ' . $try . ' of ' . $this->tries . ')');
                 }
             } catch (\Google_Service_Exception $e) {
-                if ($e->getCode() !== 401) {
-                    throw $e;
-                } else {
+                // The requested file or directory was not found
+                if ($e->getCode() === 404) {
+                    return null;
+                }
+
+                // Authorization error, retry
+                elseif ($e->getCode() === 401) {
                     $this->logger && $this->logger->debug(__FUNCTION__ . ': API token expired unexpectedly, refreshing token and retrying. (try ' . $try . ' of ' . $this->tries . ')');
+                }
+
+                else {
+                    throw $e;
                 }
             }
 
@@ -264,7 +273,7 @@ class HttpWrapper
 
 
     /**
-     * Getch a list of files
+     * Fetch a list of files
      *
      * @param array $optionalParams
      * @return \Google_Service_Drive_FileList
@@ -299,12 +308,13 @@ class HttpWrapper
      *
      * @param string $name
      * @param string $parent
+     * @param string $mimeType
      * @param int $fileSize
      * @param int $chunkSize
      * @param array $optionalParams
      * @return \Google_Http_MediaFileUpload
      */
-    final public function fileUploadStart(string $name, string $parent, int $fileSize, int $chunkSize, array $optionalParams = []) : \Google_Http_MediaFileUpload
+    final public function fileUploadStart(string $name, string $parent, string $mimeType, int $fileSize, int $chunkSize, array $optionalParams = []) : \Google_Http_MediaFileUpload
     {
         $file = new \Google_Service_Drive_DriveFile([
             'name' => $name,
@@ -317,7 +327,7 @@ class HttpWrapper
         $media = new \Google_Http_MediaFileUpload(
             $this->getClient(),
             $this->getService()->files->create($file, $optionalParams),
-            self::FILE_MIME_TYPE,
+            $mimeType,
             null,
             true,
             $chunkSize
@@ -353,14 +363,22 @@ class HttpWrapper
      * Get a download stream to a file
      *
      * @param string $fileId
+     * @param int|null $offset
+     * @param int|null $bytes
      * @return resource
      */
-    final public function fileDownload(string $fileId)
+    final public function fileDownload(string $fileId, int $offset = null, int $bytes = null)
     {
-        return $this->retryApiCall(function() use ($fileId) {
+        return $this->retryApiCall(function() use ($fileId, $offset, $bytes) {
             $httpClient = $this->getClient()->authorize();
             $this->getClient()->setDefer(true);
+            /* @var $fileRequest Request */
             $fileRequest = $this->getService()->files->get($fileId, ['alt' => 'media']);
+
+            if ($offset !== null) {
+                $fileRequest = $fileRequest->withAddedHeader('Range', 'bytes=' . $offset . '-' . ($bytes !== null ? $offset+$bytes-1 : ''));
+            }
+
             $response = $httpClient->send($fileRequest, ['stream' => true]);
             return $response->getBody()->detach();
         });
@@ -415,12 +433,12 @@ class HttpWrapper
      * @param string $fileId
      * @param \Google_Service_Drive_DriveFile $file
      * @param array $optionalParameters
-     * @return bool
+     * @return \Google_Service_Drive_DriveFile|null
      */
-    final public function updateFileMetadata(string $fileId, \Google_Service_Drive_DriveFile $file, array $optionalParameters) : bool
+    final public function updateFileMetadata(string $fileId, \Google_Service_Drive_DriveFile $file, array $optionalParameters = []) : ?\Google_Service_Drive_DriveFile
     {
         return $this->retryApiCall(function() use ($fileId, $file, $optionalParameters) {
-            return ($this->getService()->files->update($fileId, $file, $optionalParameters) !== false);
+            return ($this->getService()->files->update($fileId, $file, $optionalParameters) ?: null);
         });
     }
 
